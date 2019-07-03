@@ -1,0 +1,29 @@
+{
+    "strategy_id": 0,
+    
+    "auth": {
+        "api_key": "",
+        "seceret_key": "",
+        "passphrase": ""
+    },
+
+    "k_line_period": 86400,
+    "sampling_num": 7,
+    "leverage": 10,
+    "coin_usdt": 100,
+    "coin_usdt_overflow": 2,
+
+    "insurance": {
+        "usdt_insurance_amount": 100,
+        "btc_insurance_amount": 2,
+        "other_insurance_amount": 20
+    },
+    "long": {
+        "btc_instrument_amount": 4,
+        "other_instrument_amount": 40
+    },
+    "short": {
+        "btc_instrument_amount": 4,
+        "other_instrument_amount": 40
+    }
+}
