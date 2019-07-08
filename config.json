@@ -25,5 +25,10 @@
     "short": {
         "btc_instrument_amount": 4,
         "other_instrument_amount": 40
+    },
+    "grid": {
+        "grid_distence": 1,
+        "max_grid_distence": 5,
+        "instrument_amount": 2
     }
 }
