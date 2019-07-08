@@ -32,7 +32,8 @@ class Strategy(object):
                 "grid_short": 0,
                 "baseline": 0,
                 "changed": 0,
-                "grid_order": [None for n in range(self._grid["max_grid_distence"])]
+                "best": 0,
+                "grid_order": None
             },
             {
                 "currency": "LTC",
@@ -46,7 +47,8 @@ class Strategy(object):
                 "grid_short": 0,
                 "baseline": 0,
                 "changed": 0,
-                "grid_order": [None for n in range(self._grid["max_grid_distence"])]
+                "best": 0,
+                "grid_order": None
             },
             {
                 "currency": "ETH",
@@ -60,7 +62,8 @@ class Strategy(object):
                 "grid_short": 0,
                 "baseline": 0,
                 "changed": 0,
-                "grid_order": [None for n in range(self._grid["max_grid_distence"])]
+                "best": 0,
+                "grid_order": None
             },
             {
                 "currency": "EOS",
@@ -74,7 +77,8 @@ class Strategy(object):
                 "grid_short": 0,
                 "baseline": 0,
                 "changed": 0,
-                "grid_order": [None for n in range(self._grid["max_grid_distence"])]
+                "best": 0,
+                "grid_order": None
             },
             {
                 "currency": "BCH",
@@ -88,7 +92,8 @@ class Strategy(object):
                 "grid_short": 0,
                 "baseline": 0,
                 "changed": 0,
-                "grid_order": [None for n in range(self._grid["max_grid_distence"])]
+                "best": 0,
+                "grid_order": None
             },
             {
                 "currency": "XRP",
@@ -102,7 +107,8 @@ class Strategy(object):
                 "grid_short": 0,
                 "baseline": 0,
                 "changed": 0,
-                "grid_order": [None for n in range(self._grid["max_grid_distence"])]
+                "best": 0,
+                "grid_order": None
             }]
         self.currentLong = [{
             "currency": "",
@@ -190,22 +196,30 @@ class Strategy(object):
     def get_all_position(self):
         long_index = 0
         for currency in self.currencyList:
-            position = int(self._future_api.get_specific_position(
-                currency["instrument_id"])["holding"][0]["long_qty"])
-            position -= currency["grid_long"]
+            position = self._future_api.get_specific_position(
+                currency["instrument_id"])
             if(position["holding"]):
-                currency["long"] = position
-                if(currency["long"] != 0):
+                if(currency["grid_long"] > 0):
+                    currency["long"] = int(
+                        position["holding"][0]["long_qty"]) - currency["grid_long"]
+                else:
+                    currency["long"] = int(
+                        position["holding"][0]["long_qty"]) + currency["grid_long"]
+                if(currency["long"] > 0):
                     self.currentLong[long_index] = currency
                     long_index += 1
 
         short_index = 0
         for currency in self.currencyList:
-            position = int(self._future_api.get_specific_position(
-                currency["instrument_id"])["holding"][0]["short_qty"])
-            position -= currency["grid_short"]
+            position = self._future_api.get_specific_position(
+                currency["instrument_id"])
             if(position["holding"]):
-                currency["short"] = position
+                if(currency["grid_short"] > 0):
+                    currency["long"] = int(
+                        position["holding"][0]["long_qty"]) - currency["grid_short"]
+                else:
+                    currency["long"] = int(
+                        position["holding"][0]["long_qty"]) + currency["grid_short"]
                 if(currency["currency"] == "BTC"):
                     if(currency["short"] > self._short["btc_instrument_amount"]):
                         currency["insurance"] = self._insurance["btc_insurance_amount"]
@@ -222,7 +236,7 @@ class Strategy(object):
                     elif(currency["short"] == self._insurance["btc_insurance_amount"]):
                         currency["insurance"] = self._insurance["btc_insurance_amount"]
                         currency["short"] = 0
-                    elif(currency["short"] != 0):
+                    elif(currency["short"] > 0):
                         currency["insurance"] = 0
                         if(short_index < 2):
                             self.currentShort[short_index] = currency
@@ -246,7 +260,7 @@ class Strategy(object):
                     elif(currency["short"] == self._insurance["other_insurance_amount"]):
                         currency["insurance"] = self._insurance["other_insurance_amount"]
                         currency["short"] = 0
-                    elif(currency["short"] != 0):
+                    elif(currency["short"] > 0):
                         currency["insurance"] = 0
                         if(short_index < 2):
                             self.currentShort[short_index] = currency
@@ -308,16 +322,19 @@ class Strategy(object):
             if(currency["insurance"] != 0 and currency["gain"] > 0):
                 self._future_api.take_order(
                     "", currency["instrument_id"], 4, 0, currency["insurance"], 1, self._leverage)
+                currency["changed"] = 1
                 currency["insurance"] = 0
             if(currency["insurance"] == 0 and currency["gain"] < 0):
                 if(currency["currency"] == "BTC"):
                     self._future_api.take_order(
                         "", currency["instrument_id"], 2, 0, self._insurance["btc_insurance_amount"], 1, self._leverage)
                     currency["insurance"] = self._insurance["btc_insurance_amount"]
+                    currency["changed"] = 1
                 else:
                     self._future_api.take_order(
                         "", currency["instrument_id"], 2, 0, self._insurance["other_insurance_amount"], 1, self._leverage)
                     currency["insurance"] = self._insurance["other_insurance_amount"]
+                    currency["changed"] = 1
 
             currency_future_amount = self._future_api.get_coin_account(
                 currency["currency"])
@@ -360,14 +377,18 @@ class Strategy(object):
                     self._future_api.take_order(
                         "", self.currentLong[i]["instrument_id"], 3, 0, self.currentLong[i]["long"], 1, self._leverage)
                     self.set_changed(self.currentLong[i]["currency"])
+                    self.set_best(self.currentLong[i]["currency"], 0)
                 order_result = {}
                 if(self.currencyList[i]["currency"] == "BTC"):
                     order_result = self._future_api.take_order(
                         "", self.currencyList[i]["instrument_id"], 1, 0, self._long["btc_instrument_amount"], 1, self._leverage)
+                    self.set_changed(self.currencyList[i]["currency"])
+                    self.set_best(self.currencyList[i]["currency"], 1)
                 else:
                     order_result = self._future_api.take_order(
                         "", self.currencyList[i]["instrument_id"], 1, 0, self._long["other_instrument_amount"], 1, self._leverage)
                     self.set_changed(self.currencyList[i]["currency"])
+                    self.set_best(self.currencyList[i]["currency"], 1)
                 if(order_result["result"]):
                     self.currentLong[i] = self.currencyList[i]
             if(self.currencyList[i]["gain"] < 0 and (self.currencyList[i]["currency"] == self.currentLong[0]["currency"] or self.currencyList[i]["currency"] == self.currentLong[1]["currency"])):
@@ -375,6 +396,7 @@ class Strategy(object):
                 close_result = self._future_api.take_order(
                     "", self.currencyList[i]["instrument_id"], 3, 0, self.currentLong[i]["long"], 1, self._leverage)
                 self.set_changed(self.currencyList[i]["currency"])
+                self.set_best(self.currencyList[i]["currency"], 0)
                 if(close_result["result"]):
                     self.currentLong[self.currentLong.index(self.currencyList[i])] = {
                         "currency": "",
@@ -396,20 +418,25 @@ class Strategy(object):
                     self._future_api.take_order(
                         "", self.currentShort[i]["instrument_id"], 4, 0, self.currentShort[i]["short"], 1, self._leverage)
                     self.set_changed(self.currentShort[i]["currency"])
+                    self.set_best(self.currentShort[i]["currency"], 0)
                 order_result = {}
                 if(self.currencyList[i]["currency"] == "BTC"):
                     order_result = self._future_api.take_order(
                         "", self.currencyList[i]["instrument_id"], 2, 0, self._short["btc_instrument_amount"], 1, self._leverage)
+                    self.set_changed(self.currencyList[i]["currency"])
+                    self.set_best(self.currencyList[i]["currency"], 1)
                 else:
                     order_result = self._future_api.take_order(
                         "", self.currencyList[i]["instrument_id"], 2, 0, self._short["other_instrument_amount"], 1, self._leverage)
                     self.set_changed(self.currencyList[i]["currency"])
+                    self.set_best(self.currencyList[i]["currency"], 1)
                 if(order_result["result"]):
                     self.currentShort[i] = self.currencyList[i]
             if(self.currencyList[i]["gain"] > 0 and (self.currencyList[i]["currency"] == self.currentShort[0]["currency"] or self.currencyList[i]["currency"] == self.currentShort[1]["currency"])):
                 close_result = self._future_api.take_order(
                     "", self.currencyList[i]["instrument_id"], 4, 0, self.currentShort[i]["short"], 1, self._leverage)
                 self.set_changed(self.currencyList[i]["currency"])
+                self.set_best(self.currencyList[i]["currency"], 0)
                 if(close_result["result"]):
                     self.currentShort[self.currentShort.index(self.currencyList[i])] = {
                         "currency": "",
@@ -443,12 +470,17 @@ class Strategy(object):
             traceback.print_exc()
 
     # 网格算法
-    def set_changed(self, currency):
+    def set_changed(self, name):
         for currency in self.currencyList:
-            if(currency["currency"] == currency):
+            if(currency["currency"] == name):
                 currency["changed"] = 1
-                return True
-        return False
+                break
+
+    def set_best(self, name, whether):
+        for currency in self.currencyList:
+            if(currency["currency"] == name):
+                currency["best"] = whether
+                break
 
     def get_baseline(self, instrument_id):
         _k_line_datas = self._future_api.get_kline(
@@ -457,105 +489,174 @@ class Strategy(object):
 
     def get_all_baseline(self):
         for currency in self.currencyList:
-            currency["baseline"] = self.get_baseline(currency["instrument_id"])
-
-    def init_grid(self):
-        self.get_all_baseline()
-        for currency in self.currencyList[1:]:
-            for order_num, order in enumerate(currency["grid_order"]):
-                if(not order):
-                    if(currency["gain"] > 0):
-                        order_id = "OL-" + str(order_num+1)
-                        order_price = currency["baseline"] * (
-                            1 - self._grid["grid_distence"] * (order_num + 1) * 0.01)
-                        order_result = self._future_api.take_order(
-                            order_id, currency["instrument_id"], 1, order_price, self._grid["instrument_amount"], 0, self._leverage)
-                        if(order_result["result"]):
-                            order = order_id
-                            currency["grid_long"] += self._grid["instrument_amount"]
-                    else:
-                        order_id = "OS-" + str(order_num+1)
-                        order_price = currency["baseline"] * (
-                            1 + self._grid["grid_distence"] * (order_num + 1) * 0.01)
-                        order_result = self._future_api.take_order(
-                            order_id, currency["instrument_id"], 2, order_price, self._grid["instrument_amount"], 0, self._leverage)
-                        if(order_result["result"]):
-                            order = order_id
-                            currency["grid_short"] += self._grid["instrument_amount"]
+            if(currency["currency"] == "BTC"):
+                continue
+            _k_line_datas = self._future_api.get_kline(
+                currency["instrument_id"], self._k_line_period)
+            currency["baseline"] = float(_k_line_datas[0][4])
 
     def reset_grid(self):
-        self.get_all_baseline()
-        for currency in self.currencyList[1:]:
+        for currency in self.currencyList:
+            if(currency["currency"] == "BTC"):
+                continue
             if(currency["changed"] == 1):
-                for order in currency["grid_order"]:
-                    if(order):
+                currency["baseline"] = self.get_baseline(
+                    currency["instrument_id"])
+                all_orders = self._future_api.get_order_list(
+                    "6", currency["instrument_id"], "", "", "")
+                for order in all_orders["order_info"]:
+                    if(order["client_oid"]):
                         self._future_api.revoke_order(
-                            currency["instrument_id"], "", order)
-                        if(order[:2] == "OL"):
-                            currency["grid_long"] -= self._grid["instrument_amount"]
-                        elif(order[:2] == "OS"):
-                            currency["grid_short"] -= self._grid["instrument_amount"]
-                        order = None
-        self.init_grid()
+                            currency["instrument_id"], "", order["client_oid"])
+                if(currency["grid_long"] > 0):
+                    self._future_api.take_order(
+                        "", currency["instrument_id"], 3, 0, currency["grid_long"], 1, self._leverage)
+                if(currency["grid_short"] > 0):
+                    self._future_api.take_order(
+                        "", currency["instrument_id"], 4, 0, currency["grid_short"], 1, self._leverage)
+                currency["grid_long"] = 0
+                currency["grid_short"] = 0
+                currency["grid_order"] = None
+                if(not currency["best"]):
+                    continue
+                if(not currency["grid_order"]):
+                    currency["grid_order"] = [None for n in range(
+                        self._grid["max_grid_distence"] * 2)]
+                for order_num, order in enumerate(currency["grid_order"]):
+                    if(not order):
+                        if(currency["gain"] > 0):
+                            if(order_num < 5):
+                                order_id = "OL" + \
+                                    str(order_num+1) + currency["currency"]
+                                order_price = currency["baseline"] * (
+                                    1 - self._grid["grid_distence"] * (order_num + 1) * 0.01)
+                                order_result = self._future_api.take_order(
+                                    order_id, currency["instrument_id"], 1, order_price, self._grid["instrument_amount"], 0, self._leverage)
+                                print(order_result)
+                                if(order_result["result"]):
+                                    currency["grid_order"][order_num] = order_id
+                            else:
+                                order_id = "CL" + \
+                                    str(order_num-5+1) + currency["currency"]
+                                order_price = currency["baseline"] * (
+                                    1 + self._grid["grid_distence"] * (order_num-5+1) * 0.01)
+                                order_result = self._future_api.take_order(
+                                    order_id, currency["instrument_id"], 3, order_price, self._grid["instrument_amount"], 0, self._leverage)
+                                print(order_result)
+                                if(order_result["result"]):
+                                    currency["grid_order"][order_num] = order_id
+                        else:
+                            if(order_num < 5):
+                                order_id = "OS" + \
+                                    str(order_num+1) + currency["currency"]
+                                order_price = currency["baseline"] * (
+                                    1 + self._grid["grid_distence"] * (order_num + 1) * 0.01)
+                                order_result = self._future_api.take_order(
+                                    order_id, currency["instrument_id"], 2, order_price, self._grid["instrument_amount"], 0, self._leverage)
+                                print(order_result)
+                                if(order_result["result"]):
+                                    currency["grid_order"][order_num] = order_id
+                            else:
+                                order_id = "CS" + \
+                                    str(order_num - 5 + 1) + \
+                                    currency["currency"]
+                                order_price = currency["baseline"] * (
+                                    1 - self._grid["grid_distence"] * (order_num-5+1) * 0.01)
+                                order_result = self._future_api.take_order(
+                                    order_id, currency["instrument_id"], 4, order_price, self._grid["instrument_amount"], 0, self._leverage)
+                                print(order_result)
+                                if(order_result["result"]):
+                                    currency["grid_order"][order_num] = order_id
+                    currency["changed"] = 0
 
     def check_orders(self):
-        for currency in self.currencyList[1:]:
+        for currency in self.currencyList:
+            if(currency["currency"] == "BTC"):
+                continue
+            if(not currency["best"]):
+                continue
             for order_num, order in enumerate(currency["grid_order"]):
                 if(order):
                     order_info = self._future_api.get_order_info(
                         currency["instrument_id"], "", order)
                     if(order[:2] == "OL" and order_info["order_type"] == "2"):
                         currency["grid_long"] += self._grid["instrument_amount"]
-                        order_id = "CL-" + str(order_num+1)
+                        order_id = "CL" + \
+                            order[2] + currency["currency"]
                         order_price = order_info["price"] * \
                             (1 + self._grid["grid_distence"] * 0.01)
                         order_result = self._future_api.take_order(
                             order_id, currency["instrument_id"], 3, order_price, self._grid["instrument_amount"], 0, self._leverage)
+                        print(order_result)
                         if(order_result["result"]):
-                            order = order_id
+                            currency["grid_order"][order_num] = order_id
                     elif(order[:2] == "OS" and order_info["order_type"] == "2"):
                         currency["grid_short"] += self._grid["instrument_amount"]
-                        order_id = "CS-" + str(order_num+1)
+                        order_id = "CS" + \
+                            order[2] + currency["currency"]
                         order_price = order_info["price"] * \
                             (1 - self._grid["grid_distence"] * 0.01)
                         order_result = self._future_api.take_order(
                             order_id, currency["instrument_id"], 4, order_price, self._grid["instrument_amount"], 0, self._leverage)
+                        print(order_result)
                         if(order_result["result"]):
-                            order = order_id
+                            currency["grid_order"][order_num] = order_id
                     elif(order[:2] == "CL" and order_info["order_type"] == "2"):
                         currency["grid_long"] -= self._grid["instrument_amount"]
-                        order_id = "OL-" + str(order_num+1)
+                        order_id = "OL" + \
+                            order[2] + currency["currency"]
                         order_price = order_info["price"] * \
                             (1 - self._grid["grid_distence"] * 0.01)
                         order_result = self._future_api.take_order(
                             order_id, currency["instrument_id"], 1, order_price, self._grid["instrument_amount"], 0, self._leverage)
+                        print(order_result)
                         if(order_result["result"]):
-                            order = order_id
+                            currency["grid_order"][order_num] = order_id
                     elif(order[:2] == "CS" and order_info["order_type"] == "2"):
                         currency["grid_short"] -= self._grid["instrument_amount"]
-                        order_id = "OS-" + str(order_num+1)
+                        order_id = "OS" + \
+                            order[2] + currency["currency"]
                         order_price = order_info["price"] * \
                             (1 + self._grid["grid_distence"] * 0.01)
                         order_result = self._future_api.take_order(
                             order_id, currency["instrument_id"], 2, order_price, self._grid["instrument_amount"], 0, self._leverage)
+                        print(order_result)
                         if(order_result["result"]):
-                            order = order_id
+                            currency["grid_order"][order_num] = order_id
+    
+    def init(self):
+        self.update_config()
+        self.get_all_instuments_id()
+        # 输出当前参数信息
+        # print("BTC 开多: %d    其他开多: %d" % (
+        #     self._long["btc_instrument_amount"], self._long["other_instrument_amount"]))
+        # print("BTC 开空: %d    其他开空: %d" % (
+        #     self._short["btc_instrument_amount"], self._short["other_instrument_amount"]))
+        # print("周期: %d    采样个数: %d    杠杆: %d" % (
+        #     self._k_line_period, self._sampling_num, self._leverage))
+
+    def start_grid(self):
+        try:
+            print("[动态网格模块检测]")
+            self.reset_grid()
+            self.check_orders()
+            print("[当前网格信息]")
+            self.get_all_position()
+            for currency in self.currencyList:
+                print(currency)
+            print("\n")
+        except Exception as e:
+            print("[错误信息]")
+            traceback.print_exc()
+            print("[当前网格信息]")
+            self.get_all_position()
+            for currency in self.currencyList:
+                print(currency)
+            print("\n")
 
     def start(self):
         try:
             print(datetime.datetime.now())
-            print("[更新配置中]")
-            self.update_config()
-            # 输出当前参数信息
-            print("BTC 开多: %d    其他开多: %d" % (
-                self._long["btc_instrument_amount"], self._long["other_instrument_amount"]))
-            print("BTC 开空: %d    其他开空: %d" % (
-                self._short["btc_instrument_amount"], self._short["other_instrument_amount"]))
-            print("周期: %d    采样个数: %d    杠杆: %d\n" % (
-                self._k_line_period, self._sampling_num, self._leverage))
-            print("[拉取合约信息]")
-            self.get_all_instuments_id()
-            print("[计算加权涨幅]")
             self.get_all_gain()
             print("[更新套保中]")
             self.get_all_position()
@@ -570,13 +671,13 @@ class Strategy(object):
             time.sleep(10)
             self.open_short_order()
             time.sleep(10)
-            print("\n[当前开多]")
+            print("[当前开多]")
             print(self.currentLong)
             print("[当前开空]")
             print(self.currentShort)
-            print("[拉取收益信息]")
-            self.get_all_equity()
-            print("当前净值: " + str(self.equitySum))
+            # print("[拉取收益信息]")
+            # self.get_all_equity()
+            # print("当前净值: " + str(self.equitySum))
             print("[当前数据信息]")
             self.get_all_position()
             for currency in self.currencyList:
@@ -597,17 +698,34 @@ class Strategy(object):
                 print(self.currentLong)
                 print("[当前开空]")
                 print(self.currentShort)
-                print("[拉取收益信息]")
-                self.get_all_equity()
-                print("当前净值: " + str(self.equitySum))
+                # print("[拉取收益信息]")
+                # self.get_all_equity()
+                # print("当前净值: " + str(self.equitySum))
                 print("[当前数据信息]")
                 self.get_all_position()
                 for currency in self.currencyList:
                     print(currency)
-                    print("\n")
+                print("\n")
             except Exception as e_again:
                 print("[错误信息x2]")
                 traceback.print_exc()
+
+    def clear(self):
+        for currency in self.currencyList:
+            all_orders = self._future_api.get_order_list(
+                    "6", currency["instrument_id"], "", "", "")
+            for order in all_orders["order_info"]:
+                if(order["client_oid"]):
+                    self._future_api.revoke_order(
+                        currency["instrument_id"], "", order["client_oid"])
+            position = self._future_api.get_specific_position(
+                currency["instrument_id"])
+            if(int(position["holding"][0]["long_qty"])):
+                self._future_api.take_order(
+                    "", currency["instrument_id"], 3, 0, int(position["holding"][0]["long_qty"]), 1, self._leverage)
+            if(int(position["holding"][0]["short_qty"])):
+                self._future_api.take_order(
+                    "", currency["instrument_id"], 4, 0, int(position["holding"][0]["short_qty"]), 1, self._leverage)
 
 
 if __name__ == '__main__':
@@ -624,11 +742,16 @@ if __name__ == '__main__':
 
     strategy = Strategy(config_filename)
     # strategy.dynamicEquilibrium()
+    strategy.init()
+    strategy.clear()
     strategy.start()
+    strategy.start_grid()
     last_bar_time = strategy.get_bar_time()
     now_bar_time = last_bar_time
     while(True):
+        strategy.init()
         # strategy.dynamicEquilibrium()
+        strategy.start_grid()
         now_bar_time = strategy.get_bar_time()
         if(now_bar_time != last_bar_time):
             strategy.start()
