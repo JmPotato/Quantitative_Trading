@@ -206,7 +206,8 @@ class Strategy(object):
                     currency["long"] = int(
                         position["holding"][0]["long_qty"]) + currency["grid_long"]
                 if(currency["long"] > 0):
-                    self.currentLong[long_index] = currency
+                    if(long_index < 2):
+                        self.currentLong[long_index] = currency
                     long_index += 1
 
         short_index = 0
@@ -215,11 +216,11 @@ class Strategy(object):
                 currency["instrument_id"])
             if(position["holding"]):
                 if(currency["grid_short"] > 0):
-                    currency["long"] = int(
-                        position["holding"][0]["long_qty"]) - currency["grid_short"]
+                    currency["short"] = int(
+                        position["holding"][0]["short_qty"]) - currency["grid_short"]
                 else:
-                    currency["long"] = int(
-                        position["holding"][0]["long_qty"]) + currency["grid_short"]
+                    currency["short"] = int(
+                        position["holding"][0]["short_qty"]) + currency["grid_short"]
                 if(currency["currency"] == "BTC"):
                     if(currency["short"] > self._short["btc_instrument_amount"]):
                         currency["insurance"] = self._insurance["btc_insurance_amount"]
@@ -745,13 +746,13 @@ if __name__ == '__main__':
     strategy.init()
     strategy.clear()
     strategy.start()
-    strategy.start_grid()
+    # strategy.start_grid()
     last_bar_time = strategy.get_bar_time()
     now_bar_time = last_bar_time
     while(True):
         strategy.init()
         # strategy.dynamicEquilibrium()
-        strategy.start_grid()
+        # strategy.start_grid()
         now_bar_time = strategy.get_bar_time()
         if(now_bar_time != last_bar_time):
             strategy.start()
